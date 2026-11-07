@@ -1,0 +1,7 @@
+[
+  {"id": "demo-site", "title": "Демо: сайт", "short_description": "Демонстрационная карточка сайта. Замените своим проектом.", "image": null, "url": null, "active": true, "sort_order": 10},
+  {"id": "demo-bot", "title": "Демо: бот", "short_description": "Демонстрационная карточка бота. Замените своим проектом.", "image": null, "url": null, "active": true, "sort_order": 20},
+  {"id": "demo-automation", "title": "Демо: автоматизация", "short_description": "Демонстрационная карточка автоматизации.", "image": null, "url": null, "active": true, "sort_order": 30},
+  {"id": "demo-api", "title": "Демо: интеграция", "short_description": "Демонстрационная карточка интеграции.", "image": null, "url": null, "active": true, "sort_order": 40},
+  {"id": "demo-ui", "title": "Демо: интерфейс", "short_description": "Демонстрационная карточка интерфейса.", "image": null, "url": null, "active": true, "sort_order": 50}
+]

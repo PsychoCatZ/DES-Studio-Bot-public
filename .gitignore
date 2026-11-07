@@ -1,0 +1,70 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Runtime data: SQLite databases and journals
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Logs and process files
+*.log
+logs/
+*.pid
+*.pid.lock
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# IDE and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Keys, archives, dumps and SQLite journals
+.ssh/
+*.pem
+*.key
+id_ed25519*
+id_rsa*
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
+*.sql
+*.dump
+*.zip
+*.tar
+*.gz
