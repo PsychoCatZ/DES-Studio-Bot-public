@@ -15,10 +15,11 @@ def main_menu_keyboard(catalog: Catalog) -> InlineKeyboardMarkup:
     builder.adjust(1)
     builder.button(text="📁 Портфолио", callback_data=NavCallback(action="portfolio"))
     builder.button(text="💰 Все цены", callback_data=NavCallback(action="prices"))
+    builder.button(text="📞 Контакты", callback_data=NavCallback(action="contacts"))
     builder.button(
         text="🔗 Получить реферальную ссылку",
         callback_data=NavCallback(action="referral_link"),
     )
     builder.button(text="📝 Оставить заявку", callback_data=OrderCallback(action="start"))
-    builder.adjust(*([1] * len(catalog.categories)), 2, 1, 1)
+    builder.adjust(*([1] * len(catalog.categories)), 2, 1, 1, 1)
     return builder.as_markup()

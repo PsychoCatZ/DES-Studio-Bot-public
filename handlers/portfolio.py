@@ -1,13 +1,8 @@
-from pathlib import Path
-
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from callbacks import NavCallback, PortfolioCallback
-from keyboards.main import main_menu_keyboard
-from keyboards.portfolio import portfolio_card_keyboard, portfolio_keyboard
-from utils.catalog_loader import Catalog, Portfolio
-from utils.formatting import portfolio_card
+from keyboards.portfolio import contacts_keyboard, portfolio_keyboard
 from utils.screens import show_callback_screen
 
 
@@ -15,33 +10,27 @@ router = Router(name="portfolio")
 
 
 @router.callback_query(NavCallback.filter(F.action == "portfolio"))
-async def show_portfolio(callback: CallbackQuery, portfolio: Portfolio) -> None:
+async def show_portfolio(callback: CallbackQuery) -> None:
     await show_callback_screen(
         callback,
-        "<b>📁 Портфолио</b>\n\nВыберите проект:",
-        portfolio_keyboard(portfolio),
+        "<b>📁 Портфолио</b>\n\nПроекты и разработки — на портале и GitHub:",
+        portfolio_keyboard(),
     )
 
+
 @router.callback_query(PortfolioCallback.filter())
-async def show_project(
-    callback: CallbackQuery,
-    callback_data: PortfolioCallback,
-    portfolio: Portfolio,
-    catalog: Catalog,
-    project_root: Path,
-) -> None:
-    project = portfolio.get(callback_data.project_id)
-    if project is None:
-        await show_callback_screen(
-            callback,
-            "Проект недоступен. Вернитесь в главное меню.",
-            main_menu_keyboard(catalog),
-        )
-        return
+async def show_project(callback: CallbackQuery) -> None:
+    # Previously sent project buttons remain useful after the update.
+    await show_portfolio(callback)
+
+
+@router.callback_query(NavCallback.filter(F.action == "contacts"))
+async def show_contacts(callback: CallbackQuery) -> None:
     await show_callback_screen(
         callback,
-        portfolio_card(project),
-        portfolio_card_keyboard(),
-        image=project.image,
-        base_dir=project_root,
+        "<b>📞 Прямые контакты</b>\n\n"
+        "Телефон (только СМС): <code>+7 000 000 00 00</code>\n"
+        "Telegram: @your_username\n"
+        "WhatsApp: <code>+7 000 000-00-01</code>",
+        contacts_keyboard(),
     )

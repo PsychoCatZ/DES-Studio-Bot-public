@@ -27,31 +27,13 @@ from utils.screens import show_callback_screen
 
 router = Router(name="order")
 
-PROMPTS = {
-    "materials": "<b>Есть ли существующий проект или материалы?</b>\n\nНапример: сайт, код, макет, тексты или примеры. Если ничего нет, так и напишите.",
-    "deadline": "<b>Желаемый срок</b>\n\nУкажите дату или период. Этот шаг можно пропустить.",
-    "budget": "<b>Планируемый бюджет</b>\n\nУкажите ориентир, если он есть. Этот шаг можно пропустить.",
-    "comment": "<b>Дополнительный комментарий</b>\n\nДобавьте важные детали или пропустите этот шаг.",
-    "referral": (
-        "<b>Кто порекомендовал DES Studio?</b>\n\n"
-        "Если вы пришли по рекомендации, укажите имя или ник."
-    ),
-}
-
 CUSTOM_SERVICE_ID = "custom-development"
 ORDER_SELECTION_TEXT = (
     "<b>📝 Оставить заявку</b>\n\n"
     "Выберите услугу или укажите «Другая задача»."
 )
 
-MAX_LENGTHS = {
-    "description": 1200,
-    "materials": 700,
-    "desired_deadline": 200,
-    "budget": 200,
-    "comment": 800,
-    "referral_source": 200,
-}
+MAX_LENGTHS = {"description": 1200}
 
 
 async def _text_value(message: Message, field: str) -> str | None:
@@ -66,19 +48,17 @@ async def _text_value(message: Message, field: str) -> str | None:
     return value
 
 
-async def _show_prompt_from_callback(callback: CallbackQuery, name: str, *, skip: bool = False) -> None:
-    await show_callback_screen(callback, PROMPTS[name], step_keyboard(allow_skip=skip))
-
-
 def _description_prompt(data: dict[str, object]) -> str:
     if data.get("is_custom_service"):
         return (
             "<b>Опишите задачу</b>\n\n"
-            "Что нужно сделать и какой результат вы хотите получить?"
+            "Что нужно сделать и какой результат вы хотите получить?\n\n"
+            "Можно пропустить этот шаг."
         )
     return (
         f"<b>Опишите требования к услуге «{h(data.get('service_title'))}»</b>\n\n"
-        "Или пришлите техническое задание."
+        "Напишите требования или техническое задание текстом.\n\n"
+        "Можно пропустить этот шаг."
     )
 
 
@@ -89,7 +69,7 @@ async def _show_description_from_callback(
     await show_callback_screen(
         callback,
         _description_prompt(await state.get_data()),
-        step_keyboard(),
+        step_keyboard(allow_skip=True),
     )
 
 
@@ -225,104 +205,12 @@ async def receive_description(message: Message, state: FSMContext) -> None:
     if value is None:
         return
     await state.update_data(description=value)
-    await state.set_state(OrderStates.materials)
-    await message.answer(PROMPTS["materials"], reply_markup=step_keyboard())
-
-
-@router.message(OrderStates.materials)
-async def receive_materials(message: Message, state: FSMContext) -> None:
-    value = await _text_value(message, "materials")
-    if value is None:
-        return
-    await state.update_data(materials=value)
-    await state.set_state(OrderStates.deadline)
-    await message.answer(PROMPTS["deadline"], reply_markup=step_keyboard(allow_skip=True))
-
-
-@router.message(OrderStates.deadline)
-async def receive_deadline(message: Message, state: FSMContext) -> None:
-    value = await _text_value(message, "desired_deadline")
-    if value is None:
-        return
-    await state.update_data(desired_deadline=value)
-    await state.set_state(OrderStates.budget)
-    await message.answer(PROMPTS["budget"], reply_markup=step_keyboard(allow_skip=True))
-
-
-@router.message(OrderStates.budget)
-async def receive_budget(message: Message, state: FSMContext) -> None:
-    value = await _text_value(message, "budget")
-    if value is None:
-        return
-    await state.update_data(budget=value)
-    await state.set_state(OrderStates.comment)
-    await message.answer(PROMPTS["comment"], reply_markup=step_keyboard(allow_skip=True))
-
-
-@router.message(OrderStates.comment)
-async def receive_comment(message: Message, state: FSMContext) -> None:
-    value = await _text_value(message, "comment")
-    if value is None:
-        return
-    await state.update_data(comment=value)
-    data = await state.get_data()
-    if data.get("referral_known"):
-        await _show_confirmation_message(message, state)
-    else:
-        await state.set_state(OrderStates.referral)
-        await message.answer(PROMPTS["referral"], reply_markup=step_keyboard(allow_skip=True))
-
-
-@router.message(OrderStates.referral)
-async def receive_referral(message: Message, state: FSMContext) -> None:
-    value = await _text_value(message, "referral_source")
-    if value is None:
-        return
-    await state.update_data(
-        referral_source=value,
-        referral_automatic=False,
-        referral_known=False,
-    )
     await _show_confirmation_message(message, state)
 
 
-@router.callback_query(OrderStates.deadline, OrderCallback.filter(F.action == "skip"))
-async def skip_deadline(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(desired_deadline=None)
-    await state.set_state(OrderStates.budget)
-    await _show_prompt_from_callback(callback, "budget", skip=True)
-
-
-@router.callback_query(OrderStates.budget, OrderCallback.filter(F.action == "skip"))
-async def skip_budget(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(budget=None)
-    await state.set_state(OrderStates.comment)
-    await _show_prompt_from_callback(callback, "comment", skip=True)
-
-
-@router.callback_query(OrderStates.comment, OrderCallback.filter(F.action == "skip"))
-async def skip_comment(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(comment=None)
-    data = await state.get_data()
-    if data.get("referral_known"):
-        await state.set_state(OrderStates.confirm)
-        await show_callback_screen(
-            callback,
-            order_summary(data),
-            confirmation_keyboard(),
-        )
-    else:
-        await state.set_state(OrderStates.referral)
-        await _show_prompt_from_callback(callback, "referral", skip=True)
-
-
-@router.callback_query(OrderStates.referral, OrderCallback.filter(F.action == "skip"))
-async def skip_referral(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(
-        referral_source=None,
-        referral_automatic=False,
-        referral_known=False,
-    )
+@router.callback_query(OrderStates.description, OrderCallback.filter(F.action == "skip"))
+async def skip_description(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(description="")
     await state.set_state(OrderStates.confirm)
     await show_callback_screen(
         callback,
@@ -376,28 +264,9 @@ async def order_back(
                 else direction_keyboard(catalog)
             ),
         )
-    elif current == OrderStates.materials.state:
+    elif current == OrderStates.confirm.state:
         await state.set_state(OrderStates.description)
         await _show_description_from_callback(callback, state)
-    elif current == OrderStates.deadline.state:
-        await state.set_state(OrderStates.materials)
-        await _show_prompt_from_callback(callback, "materials")
-    elif current == OrderStates.budget.state:
-        await state.set_state(OrderStates.deadline)
-        await _show_prompt_from_callback(callback, "deadline", skip=True)
-    elif current == OrderStates.comment.state:
-        await state.set_state(OrderStates.budget)
-        await _show_prompt_from_callback(callback, "budget", skip=True)
-    elif current == OrderStates.referral.state:
-        await state.set_state(OrderStates.comment)
-        await _show_prompt_from_callback(callback, "comment", skip=True)
-    elif current == OrderStates.confirm.state:
-        if data.get("referral_known"):
-            await state.set_state(OrderStates.comment)
-            await _show_prompt_from_callback(callback, "comment", skip=True)
-        else:
-            await state.set_state(OrderStates.referral)
-            await _show_prompt_from_callback(callback, "referral", skip=True)
     else:
         await state.clear()
         await show_callback_screen(
@@ -462,10 +331,6 @@ def _admin_notification(
         f"<b>Клиент:</b>\n{h(full_name)}\n{username_text}\n"
         f"Telegram ID: {h(getattr(user, 'id', None))}\n\n"
         f"<b>Задача:</b>\n{h(data.get('description'))}\n\n"
-        f"<b>Материалы:</b>\n{h(data.get('materials'))}\n\n"
-        f"<b>Желаемый срок:</b>\n{h(data.get('desired_deadline'))}\n\n"
-        f"<b>Бюджет:</b>\n{h(data.get('budget'))}\n\n"
-        f"<b>Дополнительно:</b>\n{h(data.get('comment'))}\n\n"
         f"{source_lines}\n"
         f"<b>Дата:</b>\n{created_at.strftime('%d.%m.%Y %H:%M')}"
     )
@@ -501,11 +366,11 @@ async def send_order(
         last_name=user.last_name,
         service_id=str(data.get("service_id") or "") or None,
         service_title=str(data["service_title"]),
-        description=str(data["description"]),
-        materials=str(data["materials"]),
-        desired_deadline=data.get("desired_deadline") or None,
-        budget=data.get("budget") or None,
-        comment=data.get("comment") or None,
+        description=str(data.get("description") or ""),
+        materials="",
+        desired_deadline=None,
+        budget=None,
+        comment=None,
         referral_source=data.get("referral_source") or None,
         referrer_user_id=(
             int(data["referrer_user_id"])

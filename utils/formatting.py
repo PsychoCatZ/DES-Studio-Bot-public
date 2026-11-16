@@ -49,9 +49,5 @@ def order_summary(data: dict[str, object]) -> str:
         "<b>📝 Проверьте заявку</b>\n\n"
         f"<b>Услуга:</b>\n{h(data.get('service_title'))}\n\n"
         f"<b>Задача:</b>\n{h(data.get('description'))}\n\n"
-        f"<b>Материалы:</b>\n{h(data.get('materials'))}\n\n"
-        f"<b>Желаемый срок:</b>\n{h(data.get('desired_deadline'))}\n\n"
-        f"<b>Бюджет:</b>\n{h(data.get('budget'))}\n\n"
-        f"<b>Дополнительно:</b>\n{h(data.get('comment'))}\n\n"
         f"<i>{h(PRICE_NOTE)}</i>"
     )

@@ -17,17 +17,10 @@ from database import Database
 from handlers.order import (
     choose_order_category,
     choose_order_service,
-    receive_budget,
-    receive_comment,
-    receive_deadline,
     receive_description,
-    receive_materials,
-    receive_referral,
     send_order,
-    skip_budget,
-    skip_comment,
-    skip_deadline,
-    skip_referral,
+    skip_description,
+    order_back,
     start_order,
 )
 from handlers.start import start_command
@@ -90,7 +83,8 @@ class OrderFlowTests(unittest.IsolatedAsyncioTestCase):
             )
         prompt = screen.await_args.args[1]
         self.assertIn("Опишите требования к услуге «Telegram-бот»", prompt)
-        self.assertIn("пришлите техническое задание", prompt)
+        self.assertIn("техническое задание текстом", prompt)
+        self.assertIn("Можно пропустить", prompt)
         self.assertNotIn("Что нужно сделать", prompt)
 
     async def test_main_menu_selects_exact_service_and_custom_uses_general_prompt(self) -> None:
@@ -199,10 +193,6 @@ class OrderFlowTests(unittest.IsolatedAsyncioTestCase):
                 database,
             )
         await receive_description(FakeMessage("Нужен бот"), order_state)
-        await receive_materials(FakeMessage("Материалов нет"), order_state)
-        await receive_deadline(FakeMessage("В течение месяца"), order_state)
-        await receive_budget(FakeMessage("10 000 ₽"), order_state)
-        await receive_comment(FakeMessage("Комментарий"), order_state)
         self.assertEqual(OrderStates.confirm.state, await order_state.get_state())
 
         bot = FakeBot()
@@ -232,45 +222,65 @@ class OrderFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(repeat_data["referral_known"])
         self.assertEqual(first["referral_code"], repeat_data["referral_code"])
 
-    async def test_manual_source_without_deep_link_is_saved(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            database = Database(Path(directory) / "orders.db")
-            database.initialize()
-            state = state_context(301)
-            callback = SimpleNamespace(from_user=fake_user(301), message=object())
-            with patch("handlers.order.show_callback_screen", new=AsyncMock()):
-                await start_order(
-                    callback,
-                    OrderCallback(action="start", ref="custom-development"),
-                    state,
-                    self.catalog,
-                    database,
-                )
-            await receive_description(FakeMessage("Другая задача"), state)
-            await receive_materials(FakeMessage("Есть описание"), state)
-            await skip_deadline(callback, state)
-            await skip_budget(callback, state)
-            await skip_comment(callback, state)
-            self.assertEqual(OrderStates.referral.state, await state.get_state())
-            await receive_referral(FakeMessage("@friend"), state)
-            self.assertEqual(OrderStates.confirm.state, await state.get_state())
-
-            bot = FakeBot()
-            config = Config("token", 999, Path(directory) / "orders.db", ZoneInfo("UTC"))
-            with patch("handlers.order.show_callback_screen", new=AsyncMock()):
-                await send_order(callback, state, bot, database, config)
-            self.assertEqual("@friend", database.get_order(1)["referral_source"])
-            self.assertEqual("@friend", database.get_manual_source(301)["referral_source"])
-            self.assertIn("<b>Источник:</b> @friend", bot.messages[0][1])
-
-    async def test_referral_question_can_be_skipped(self) -> None:
-        state = state_context(401)
-        await state.set_state(OrderStates.referral)
-        callback = SimpleNamespace(from_user=fake_user(401), message=object())
+    async def test_saved_manual_source_is_reused_without_question(self) -> None:
+        database = Database(":memory:")
+        database.initialize()
+        database.remember_manual_source(301, "@friend", created_at="2026-11-16T00:00:00+00:00")
+        state = state_context(301)
+        callback = SimpleNamespace(from_user=fake_user(301), message=object())
         with patch("handlers.order.show_callback_screen", new=AsyncMock()):
-            await skip_referral(callback, state)
+            await start_order(
+                callback, OrderCallback(action="start", ref="landing"),
+                state, self.catalog, database,
+            )
+        message = FakeMessage("Требования")
+        await receive_description(message, state)
         self.assertEqual(OrderStates.confirm.state, await state.get_state())
-        self.assertIsNone((await state.get_data())["referral_source"])
+        self.assertEqual(1, len(message.answers))
+        self.assertNotIn("Материалы:", message.answers[0][0])
+        bot = FakeBot()
+        with patch("handlers.order.show_callback_screen", new=AsyncMock()):
+            await send_order(
+                callback, state, bot, database,
+                Config("token", 999, Path(":memory:"), ZoneInfo("UTC")),
+            )
+        self.assertEqual("@friend", database.get_order(1)["referral_source"])
+
+    async def test_skip_description_sends_order_without_any_questionnaire(self) -> None:
+        database = Database(":memory:")
+        database.initialize()
+        state = state_context(401)
+        callback = SimpleNamespace(from_user=fake_user(401, None), message=object())
+        screen = AsyncMock()
+        with patch("handlers.order.show_callback_screen", new=screen):
+            await start_order(
+                callback, OrderCallback(action="start", ref="landing"),
+                state, self.catalog, database,
+            )
+            buttons = screen.await_args.args[2].inline_keyboard
+            self.assertIn("ord:skip:", [b.callback_data for row in buttons for b in row])
+            await skip_description(callback, state)
+            self.assertEqual(OrderStates.confirm.state, await state.get_state())
+            summary = screen.await_args.args[1]
+            for label in ("Материалы:", "Бюджет:", "Желаемый срок:", "Дополнительно:"):
+                self.assertNotIn(label, summary)
+            await order_back(callback, state, self.catalog, database)
+            self.assertEqual(OrderStates.description.state, await state.get_state())
+            await skip_description(callback, state)
+            bot = FakeBot()
+            await send_order(
+                callback, state, bot, database,
+                Config("token", 999, Path(":memory:"), ZoneInfo("UTC")),
+            )
+        order = database.get_order(1)
+        self.assertEqual("landing", order["service_id"])
+        self.assertEqual("", order["description"])
+        self.assertEqual("", order["materials"])
+        self.assertIsNone(order["referral_source"])
+        self.assertIsNotNone(order["notified_at"])
+        self.assertIsNone(await state.get_state())
+        self.assertIn("НОВАЯ ЗАЯВКА DES STUDIO #1", bot.messages[0][1])
+        self.assertNotIn("Материалы:", bot.messages[0][1])
 
 
 if __name__ == "__main__":
